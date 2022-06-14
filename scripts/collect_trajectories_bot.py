@@ -58,6 +58,13 @@ parser.add_option(
 )
 
 parser.add_option(
+    "--snapshot_every",
+    default=500,
+    type="int",
+    help="Every % episodes the dataframe is saved"
+)
+
+parser.add_option(
     "--level",
     default=None
 )
@@ -222,6 +229,10 @@ for level_name in level_list:
             print(optimal_actions)
             print(expert.stack)
             break
+
+        if run_no % 500 == 0:
+            # make a snapshot every n steps
+            storage_df.to_pickle(storage_name)
 
     storage_df.to_pickle(storage_name)
 
