@@ -145,6 +145,8 @@ for level_name in level_list:
         ]
     )
 
+
+
     for run_no in tqdm(range(options.num_runs)):
         level = level_dict[level_name]
 
@@ -164,8 +166,36 @@ for level_name in level_list:
 
             episode_steps = 0
             last_action = None
+
             while True:
-                action = expert.replan(last_action)
+                try:
+                    action = expert.replan(last_action)
+                except AssertionError as e:
+                    # probably the shortest path error, do a random action instead
+                    # depict the observed image as well as stack trace to make sure,
+                    # that we are not accidentally dealing with a different exception
+                    print(e)
+                    print(e.__traceback__)
+                    print(mission.gen_obs()['image'][:,:,0])
+
+                    # scrap the episode in this case
+                    break
+
+                    # generate a random action instead
+                    # while True:
+                    #     action = bad_agent.act(mission.gen_obs())['action'].item()
+                    #     fwd_pos = mission.agent_pos + mission.dir_vec
+                    #     fwd_cell = mission.grid.get(*fwd_pos)
+                    #     # The current bot can't recover from two kinds of behaviour:
+                    #     # - opening a box (cause it just disappears)
+                    #     # - closing a door (cause its path finding mechanism get confused)
+                    #     opening_box = (action == mission.actions.toggle
+                    #                    and fwd_cell and fwd_cell.type == 'box')
+                    #     closing_door = (action == mission.actions.toggle
+                    #                     and fwd_cell and fwd_cell.type == 'door' and fwd_cell.is_open)
+                    #     if not opening_box and not closing_door:
+                    #         break
+
                 if options.advise_mode and episode_steps < non_optimal_steps:
                     if rng.random() < options.bad_action_proba:
                         while True:
