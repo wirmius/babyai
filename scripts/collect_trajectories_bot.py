@@ -30,12 +30,11 @@ eval_boy.py --advise_mode --bad_action_proba .8 --non_optimal_steps 10 --random_
 """
 
 import random
-from io import StringIO
 import time
 import traceback
 from optparse import OptionParser
 
-import numpy as np
+from tqdm import tqdm
 
 from babyai.levels import level_dict
 from babyai.bot import Bot
@@ -132,14 +131,14 @@ for level_name in level_list:
 
 
     # create the pandas df to store and then serialise the values
-    storage_name = options.storage_dir + level_name + ".parquet"
+    storage_name = options.storage_dir + level_name + ".pickle"
     storage_df = pd.DataFrame(
         columns=[
             'n_episode', 'n_step', 'last', 'obs_env', 'obs_text', 'obs_dir', 'action_taken', 'reward'
         ]
     )
 
-    for run_no in range(options.num_runs):
+    for run_no in tqdm(range(options.num_runs)):
         level = level_dict[level_name]
 
         mission_seed = options.seed + run_no
