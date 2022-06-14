@@ -1,6 +1,20 @@
 #!/usr/bin/env python3
 
 """
+MI:
+    trajectories are collected into an sqllite database.
+    a file is created for each environment in the provided directory
+    the following information is collected:
+        > episode number
+        > step number
+        > last?
+        > the rendered observation
+        > the observation image
+        > the text message
+        > the direction
+        > action taken
+        > reward
+
 Evaluate the success rate of the bot
 This script is used for testing/debugging purposes
 
@@ -16,14 +30,19 @@ eval_boy.py --advise_mode --bad_action_proba .8 --non_optimal_steps 10 --random_
 """
 
 import random
+from io import StringIO
 import time
 import traceback
 from optparse import OptionParser
+
+import numpy as np
+
 from babyai.levels import level_dict
 from babyai.bot import Bot
 from babyai.utils.agent import ModelAgent, RandomAgent
 from random import Random
 
+import pandas as pd
 
 # MissBossLevel is the only level the bot currently can't always handle
 level_list = [name for name, level in level_dict.items()
@@ -31,6 +50,14 @@ level_list = [name for name, level in level_dict.items()
 
 
 parser = OptionParser()
+
+parser.add_option(
+    "--storage_dir",
+    default="./",
+    type="str",
+    help="The directory to store the recordings."
+)
+
 parser.add_option(
     "--level",
     default=None
@@ -103,6 +130,15 @@ for level_name in level_list:
     total_episode_steps = 0
     total_bfs_steps = 0
 
+
+    # create the pandas df to store and then serialise the values
+    storage_name = options.storage_dir + level_name + ".parquet"
+    storage_df = pd.DataFrame(
+        columns=[
+            'n_episode', 'n_step', 'last', 'obs_env', 'obs_text', 'obs_dir', 'action_taken', 'reward'
+        ]
+    )
+
     for run_no in range(options.num_runs):
         level = level_dict[level_name]
 
@@ -119,6 +155,7 @@ for level_name in level_list:
         rng = Random(mission_seed)
 
         try:
+
             episode_steps = 0
             last_action = None
             while True:
@@ -142,11 +179,27 @@ for level_name in level_list:
                 else:
                     optimal_actions.append(action)
 
+                original_obs = mission.gen_obs()
                 obs, reward, done, info = mission.step(action)
+
+                step_dict = {
+                                'n_episode': run_no,
+                                'n_step': episode_steps,
+                                'last': done,
+                                'obs_env': original_obs['image'],
+                                'obs_text': original_obs['mission'],
+                                'obs_dir': original_obs['direction'],
+                                'action_taken': action,
+                                'reward': reward
+                }
+
                 last_action = action
 
                 total_reward += reward
                 episode_steps += 1
+
+                # add to the dataframe
+                storage_df = storage_df.append(step_dict, ignore_index=True, sort=False)
 
                 if done:
                     total_episode_steps += episode_steps
@@ -171,6 +224,8 @@ for level_name in level_list:
             print(expert.stack)
             break
 
+    storage_df.to_pickle(storage_name)
+
     all_good = all_good and (num_success == options.num_runs)
 
     success_rate = 100 * num_success / options.num_runs
@@ -179,7 +234,7 @@ for level_name in level_list:
 
     print('%16s: %.1f%%, r=%.3f, s=%.2f' % (level_name, success_rate, mean_reward, mean_steps))
     # Uncomment the following line to print the number of steps per episode (useful to look for episodes to debug)
-    print({options.seed + num_run: total_steps[num_run] for num_run in range(options.num_runs)})
+    # print({options.seed + num_run: total_steps[num_run] for num_run in range(options.num_runs)})
 end_time = time.time()
 total_time = end_time - start_time
 print('total time: %.1fs' % total_time)
