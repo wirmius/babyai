@@ -156,6 +156,9 @@ for level_name in level_list:
         # if the starting run is set read from the storage
         storage_df = pd.read_pickle(storage_name)
 
+    # to avoid extensive joins of the dataframe, that end up slowing things down noticeably after some time
+    temp_storage = []
+
     # the seeds are fixed relative to run_no, therefore the starting run option should work proper
     for run_no in tqdm(range(options.starting_run, options.num_runs)):
         level = level_dict[level_name]
@@ -223,14 +226,13 @@ for level_name in level_list:
                                 'action_taken': action,
                                 'reward': reward
                 }
+                temp_storage.append(step_dict)
 
                 last_action = action
 
                 total_reward += reward
                 episode_steps += 1
 
-                # add to the dataframe
-                storage_df = storage_df.append(step_dict, ignore_index=True, sort=False)
 
                 if done:
                     total_episode_steps += episode_steps
@@ -256,7 +258,10 @@ for level_name in level_list:
             break
 
         if run_no % options.snapshot_every == 0:
+            # consolidate temp_storage
+            temp_storage_df = pd.DataFrame(temp_storage)
             # make a snapshot every n steps
+            storage_df = pd.concat([storage_df, temp_storage_df], ignore_index=True, sort=False)
             storage_df.to_pickle(storage_name)
 
     storage_df.to_pickle(storage_name)
