@@ -51,6 +51,13 @@ level_list = [name for name, level in level_dict.items()
 parser = OptionParser()
 
 parser.add_option(
+    "--starting_run",
+    default=0,
+    type=int,
+    help="The number of run to start with, use to continue the previous data collection."
+)
+
+parser.add_option(
     "--storage_dir",
     default="./",
     type="str",
@@ -139,15 +146,18 @@ for level_name in level_list:
 
     # create the pandas df to store and then serialise the values
     storage_name = options.storage_dir + level_name + ".pickle"
-    storage_df = pd.DataFrame(
-        columns=[
-            'n_episode', 'n_step', 'last', 'obs_env', 'obs_text', 'obs_dir', 'action_taken', 'reward'
-        ]
-    )
+    if options.starting_run == 0:
+        storage_df = pd.DataFrame(
+            columns=[
+                'n_episode', 'n_step', 'last', 'obs_env', 'obs_text', 'obs_dir', 'action_taken', 'reward'
+            ]
+        )
+    else:
+        # if the starting run is set read from the storage
+        storage_df = pd.read_pickle(storage_name)
 
-
-
-    for run_no in tqdm(range(options.num_runs)):
+    # the seeds are fixed relative to run_no, therefore the starting run option should work proper
+    for run_no in tqdm(range(options.starting_run, options.num_runs)):
         level = level_dict[level_name]
 
         mission_seed = options.seed + run_no
@@ -175,26 +185,11 @@ for level_name in level_list:
                     # depict the observed image as well as stack trace to make sure,
                     # that we are not accidentally dealing with a different exception
                     print(e)
-                    print(e.__traceback__)
+                    traceback.print_exc()
                     print(mission.gen_obs()['image'][:,:,0])
 
-                    # scrap the episode in this case
+                    # scrap the episode in this case, don't mark as done, so that the episode con then be filtered out
                     break
-
-                    # generate a random action instead
-                    # while True:
-                    #     action = bad_agent.act(mission.gen_obs())['action'].item()
-                    #     fwd_pos = mission.agent_pos + mission.dir_vec
-                    #     fwd_cell = mission.grid.get(*fwd_pos)
-                    #     # The current bot can't recover from two kinds of behaviour:
-                    #     # - opening a box (cause it just disappears)
-                    #     # - closing a door (cause its path finding mechanism get confused)
-                    #     opening_box = (action == mission.actions.toggle
-                    #                    and fwd_cell and fwd_cell.type == 'box')
-                    #     closing_door = (action == mission.actions.toggle
-                    #                     and fwd_cell and fwd_cell.type == 'door' and fwd_cell.is_open)
-                    #     if not opening_box and not closing_door:
-                    #         break
 
                 if options.advise_mode and episode_steps < non_optimal_steps:
                     if rng.random() < options.bad_action_proba:
@@ -260,7 +255,7 @@ for level_name in level_list:
             print(expert.stack)
             break
 
-        if run_no % 500 == 0:
+        if run_no % options.snapshot_every == 0:
             # make a snapshot every n steps
             storage_df.to_pickle(storage_name)
 
