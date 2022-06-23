@@ -58,6 +58,13 @@ parser.add_option(
 )
 
 parser.add_option(
+    "--tile_size",
+    default=16,
+    type=int,
+    help="The tile size of the rendering."
+)
+
+parser.add_option(
     "--storage_dir",
     default="./",
     type="str",
@@ -80,6 +87,7 @@ parser.add_option(
     action='store_true',
     default=False,
     help='If specified, a RandomAgent or ModelAgent will act first, then the bot will take over')
+
 parser.add_option(
     "--non_optimal_steps",
     type=int,
@@ -116,6 +124,12 @@ parser.add_option(
 parser.add_option(
     "--verbose",
     action='store_true'
+)
+parser.add_option(
+    "--tile_size",
+    default=16,
+    type=int,
+    help="The tile size of the rendering."
 )
 (options, args) = parser.parse_args()
 
@@ -264,6 +278,8 @@ for level_name in level_list:
             storage_df = pd.concat([storage_df, temp_storage_df], ignore_index=True, sort=False)
             storage_df.to_pickle(storage_name)
 
+    temp_storage_df = pd.DataFrame(temp_storage)
+    storage_df = pd.concat([storage_df, temp_storage_df], ignore_index=True, sort=False)
     storage_df.to_pickle(storage_name)
 
     all_good = all_good and (num_success == options.num_runs)
