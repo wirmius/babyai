@@ -126,7 +126,7 @@ parser.add_option(
 (options, args) = parser.parse_args()
 
 if options.level:
-    level_list = [options.level]
+    level_list = options.level.split(',')
 
 bad_agent = None
 if options.advise_mode:
