@@ -35,13 +35,12 @@ import traceback
 from optparse import OptionParser
 
 from tqdm import tqdm
+import numpy as np
 
 from babyai.levels import level_dict
 from babyai.bot import Bot
 from babyai.utils.agent import ModelAgent, RandomAgent
 from random import Random
-
-import pandas as pd
 
 # MissBossLevel is the only level the bot currently can't always handle
 level_list = [name for name, level in level_dict.items()
@@ -55,13 +54,6 @@ parser.add_option(
     default=0,
     type=int,
     help="The number of run to start with, use to continue the previous data collection."
-)
-
-parser.add_option(
-    "--tile_size",
-    default=16,
-    type=int,
-    help="The tile size of the rendering."
 )
 
 parser.add_option(
@@ -159,19 +151,21 @@ for level_name in level_list:
 
 
     # create the pandas df to store and then serialise the values
-    storage_name = options.storage_dir + level_name + ".pickle"
-    if options.starting_run == 0:
-        storage_df = pd.DataFrame(
-            columns=[
-                'n_episode', 'n_step', 'last', 'obs_env', 'obs_text', 'obs_dir', 'action_taken', 'reward'
-            ]
-        )
-    else:
-        # if the starting run is set read from the storage
-        storage_df = pd.read_pickle(storage_name)
-
-    # to avoid extensive joins of the dataframe, that end up slowing things down noticeably after some time
-    temp_storage = []
+    storage_address = "{:s}/{:_<10s}.{:0>6d}-{:0>6d}.npz".format(options.storage_dir,
+                                                                 level_name,
+                                                                 options.starting_run,
+                                                                 options.snapshot_every)
+    storage_dict = {
+        'n_episode': [],
+        'n_step': [],
+        'last': [],
+        'obs_env': [],
+        'obs_rendered': [],
+        'obs_text': [],
+        'obs_dir': [],
+        'action_taken': [],
+        'reward': []
+    }
 
     # the seeds are fixed relative to run_no, therefore the starting run option should work proper
     for run_no in tqdm(range(options.starting_run, options.num_runs)):
@@ -230,17 +224,18 @@ for level_name in level_list:
                 original_obs = mission.gen_obs()
                 obs, reward, done, info = mission.step(action)
 
-                step_dict = {
-                                'n_episode': run_no,
-                                'n_step': episode_steps,
-                                'last': done,
-                                'obs_env': original_obs['image'],
-                                'obs_text': original_obs['mission'],
-                                'obs_dir': original_obs['direction'],
-                                'action_taken': action,
-                                'reward': reward
-                }
-                temp_storage.append(step_dict)
+                # record the transition in the list
+                storage_dict['n_episode'].append(run_no)
+                storage_dict['n_step'].append(episode_steps)
+                storage_dict['last'].append(done)
+                storage_dict['obs_env'].append(original_obs['image'])
+                storage_dict['obs_text'].append(original_obs['mission'])
+                storage_dict['obs_dir'].append(original_obs['direction'])
+                storage_dict['action_taken'].append(action)
+                storage_dict['reward'].append(reward)
+
+                # render the observation
+                storage_dict['obs_rendered'].append(mission.get_obs_render(original_obs['image']))
 
                 last_action = action
 
@@ -272,15 +267,26 @@ for level_name in level_list:
             break
 
         if run_no % options.snapshot_every == 0:
-            # consolidate temp_storage
-            temp_storage_df = pd.DataFrame(temp_storage)
-            # make a snapshot every n steps
-            storage_df = pd.concat([storage_df, temp_storage_df], ignore_index=True, sort=False)
-            storage_df.to_pickle(storage_name)
+            # flush the buffer
+            np.savez_compressed(storage_address, **{k:np.stack(np.array(v)) for k, v in storage_dict.items()})
+            # clear the buffer
+            storage_address = "{:s}/{:_<10s}.{:0>6d}-{:0>6d}.npz".format(options.storage_dir,
+                                                                         level_name,
+                                                                         run_no,
+                                                                         run_no + options.snapshot_every)
+            storage_dict = {
+                'n_episode': [],
+                'n_step': [],
+                'last': [],
+                'obs_env': [],
+                'obs_rendered': [],
+                'obs_text': [],
+                'obs_dir': [],
+                'action_taken': [],
+                'reward': []
+            }
 
-    temp_storage_df = pd.DataFrame(temp_storage)
-    storage_df = pd.concat([storage_df, temp_storage_df], ignore_index=True, sort=False)
-    storage_df.to_pickle(storage_name)
+    np.savez_compressed(storage_address, **{k: np.stack(np.array(v)) for k, v in storage_dict.items()})
 
     all_good = all_good and (num_success == options.num_runs)
 
